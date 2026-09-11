@@ -1,0 +1,36 @@
+# Ignored folders & conversation logs
+.agents/
+[Cc]onversation_*
+[Cc]onversation*
+extracted_conversation.json
+turbo_stream_data.json
+
+# .NET / C# Build & IDE Artifacts
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Node / Next.js Dependencies & Build
+**/node_modules/
+**/.next/
+frontend/out/
+frontend/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment & Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.env*
+!.env.example
+
+# OS Files
+.DS_Store
+Thumbs.db

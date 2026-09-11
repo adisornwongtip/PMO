@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PayFlow OS — Payment Orchestration & Reconciliation Architecture",
+    "visual_preset": "signal-flow"
+  },
+  "components": [
+    { "id": "portal", "type": "frontend", "label": "Merchant Portal", "sublabel": "Next.js 15 UI", "pos": [60, 100], "size": [140, 60] },
+    { "id": "merchants", "type": "external", "label": "Merchant App", "sublabel": "E-commerce & Web", "pos": [60, 280], "size": [140, 60] },
+    { "id": "reconciler", "type": "backend", "label": "Reconciliation OS", "sublabel": "Automated Matcher", "pos": [310, 100], "size": [150, 60] },
+    { "id": "api", "type": "backend", "label": "PayFlow Core API", "sublabel": ".NET 10 Engine", "pos": [310, 280], "size": [150, 60] },
+    { "id": "db", "type": "database", "label": "Transaction Ledger", "sublabel": "PostgreSQL ACID", "pos": [570, 100], "size": [150, 60] },
+    { "id": "router", "type": "backend", "label": "Smart Routing", "sublabel": "Rules & Fallback", "pos": [570, 280], "size": [150, 60] },
+    { "id": "cache", "type": "database", "label": "Health Tracker", "sublabel": "Redis In-Memory", "pos": [570, 450], "size": [150, 60] },
+    { "id": "opn", "type": "external", "label": "Opn (Omise)", "sublabel": "Cards & PromptPay", "pos": [830, 200], "size": [140, 55] },
+    { "id": "gb", "type": "external", "label": "GB Prime Pay", "sublabel": "Thai QR & Wallets", "pos": [830, 280], "size": [140, 55] },
+    { "id": "mock", "type": "external", "label": "Mock Sandbox", "sublabel": "Chaos Simulator", "pos": [830, 360], "size": [140, 55] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "PayFlow OS Virtual Cloud", "wraps": ["api", "router", "reconciler", "cache", "db"] },
+    { "kind": "security-group", "label": "Core Orchestration Boundary", "wraps": ["api", "router", "reconciler"] }
+  ],
+  "connections": [
+    { "id": "c-portal-api", "from": "portal", "to": "api" },
+    { "id": "c-merchant-api", "from": "merchants", "to": "api", "variant": "emphasis" },
+    { "id": "c-api-router", "from": "api", "to": "router", "label": "Route" },
+    { "id": "c-api-reconciler", "from": "api", "to": "reconciler" },
+    { "id": "c-reconciler-db", "from": "reconciler", "to": "db", "label": "Match" },
+    { "id": "c-router-cache", "from": "router", "to": "cache", "fromSide": "bottom", "toSide": "top" },
+    { "id": "c-router-opn", "from": "router", "to": "opn", "label": "Primary" },
+    { "id": "c-router-gb", "from": "router", "to": "gb", "variant": "dashed" },
+    { "id": "c-router-mock", "from": "router", "to": "mock" }
+  ]
+}

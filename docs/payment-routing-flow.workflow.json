@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "PayFlow Smart Routing & Automatic Failover Flow",
+    "output": "docs/payment-routing-flow.html",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "happy-path", "label": "Primary Gateway Success", "focus": ["request", "idempotency", "eval_rules", "primary_psp", "success_resp"], "note": "Standard high-speed route to primary PSP" },
+      { "id": "failover-path", "label": "Automatic Failover", "focus": ["primary_psp", "detect_fail", "fallback_psp", "success_resp"], "note": "Zero-downtime routing to secondary PSP" }
+    ]
+  },
+  "lanes": [
+    { "id": "client", "label": "Merchant Application" },
+    { "id": "orchestrator", "label": "PayFlow Core Orchestrator" },
+    { "id": "routing", "label": "Smart Routing & Circuit Health" },
+    { "id": "primary", "label": "Primary PSP (e.g. Opn)" },
+    { "id": "fallback", "label": "Fallback PSP (e.g. GB Prime Pay)" }
+  ],
+  "phases": [
+    { "id": "ingress", "label": "Ingress & Idempotency", "fromCol": 0, "toCol": 1 },
+    { "id": "route_eval", "label": "Route & Health Evaluation", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "psp_exec", "label": "Execution & Failover", "fromCol": 3, "toCol": 4, "variant": "dashed" },
+    { "id": "egress", "label": "Response & Settlement", "fromCol": 5, "toCol": 5 }
+  ],
+  "mainPath": ["request", "idempotency", "eval_rules", "primary_psp", "success_resp"],
+  "nodes": [
+    { "id": "request", "lane": "client", "col": 0, "type": "frontend", "label": "POST /payments", "sublabel": "amount + method" },
+    { "id": "idempotency", "lane": "orchestrator", "col": 1, "type": "backend", "label": "Idempotency Lock", "sublabel": "atomic key check", "tag": "financial safety" },
+    { "id": "eval_rules", "lane": "routing", "col": 2, "type": "backend", "label": "Evaluate Rules", "sublabel": "cost + health check" },
+    { "id": "primary_psp", "lane": "primary", "col": 3, "type": "external", "label": "Charge Primary", "sublabel": "Opn Charge API" },
+    { "id": "detect_fail", "lane": "orchestrator", "col": 3, "type": "security", "label": "Detect Timeout/5xx", "sublabel": "retryable error" },
+    { "id": "fallback_psp", "lane": "fallback", "col": 4, "type": "external", "label": "Auto Failover", "sublabel": "GB Prime Pay Charge", "tag": "zero downtime" },
+    { "id": "success_resp", "lane": "client", "col": 5, "type": "frontend", "label": "HTTP 200 Success", "sublabel": "unified response payload" }
+  ],
+  "edges": [
+    { "from": "request", "to": "idempotency", "variant": "emphasis" },
+    { "from": "idempotency", "to": "eval_rules", "label": "valid", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "eval_rules", "to": "primary_psp", "label": "healthy", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "primary_psp", "to": "success_resp", "label": "success", "variant": "emphasis", "route": "drop", "fromSide": "top", "toSide": "bottom" },
+    { "from": "primary_psp", "to": "detect_fail", "label": "timeout", "role": "error", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "detect_fail", "to": "fallback_psp", "label": "reroute", "variant": "dashed" },
+    { "from": "fallback_psp", "to": "success_resp", "label": "recovered", "variant": "emphasis", "route": "drop", "fromSide": "top", "toSide": "bottom" }
+  ]
+}
