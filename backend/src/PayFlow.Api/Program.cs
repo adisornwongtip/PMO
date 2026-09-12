@@ -5,7 +5,10 @@ using PayFlow.Application.Interfaces;
 using PayFlow.Domain.Entities;
 using PayFlow.Domain.Enums;
 using PayFlow.Infrastructure;
+using PayFlow.Infrastructure.Middleware;
+using PayFlow.Infrastructure.Parsers;
 using PayFlow.Infrastructure.Persistence;
+using PayFlow.Application.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +32,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.UseCors("AllowAll");
+app.UseApiKeyAuthentication();
 app.MapOpenApi();
 
 // Seed default demo merchant & routing rules
@@ -172,6 +176,41 @@ app.MapPost("/api/v1/reconciliation/upload", async (
 })
 .WithName("UploadReconciliationBatch");
 
+app.MapPost("/api/v1/reconciliation/upload-file", async (
+    [FromHeader(Name = "X-Merchant-Id")] string? merchantIdHeader,
+    IFormFile file,
+    [FromServices] AutoDetectStatementParser autoParser,
+    [FromServices] IReconciliationService reconcileService) =>
+{
+    var merchantId = Guid.TryParse(merchantIdHeader, out var parsed) 
+        ? parsed 
+        : Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    using var stream = file.OpenReadStream();
+    var detectedProvider = autoParser.DetectProvider(stream, file.FileName);
+    var records = autoParser.ParseStatement(stream, file.FileName);
+
+    var batch = await reconcileService.ProcessStatementBatchAsync(
+        merchantId,
+        detectedProvider,
+        file.FileName,
+        records);
+
+    return Results.Ok(new ReconciliationResultDto
+    {
+        BatchId = batch.Id,
+        ProviderCode = batch.ProviderCode,
+        FileName = batch.FileName,
+        TotalRecords = batch.TotalRecords,
+        MatchedCount = batch.MatchedCount,
+        UnmatchedCount = batch.UnmatchedCount,
+        DiscrepancyCount = batch.DiscrepancyCount,
+        TotalSettledAmount = batch.TotalSettledAmount
+    });
+})
+.WithName("UploadReconciliationStatementFile")
+.DisableAntiforgery();
+
 app.MapGet("/api/v1/reconciliation/batches", async (
     [FromServices] IPayFlowDbContext db) =>
 {
@@ -245,6 +284,47 @@ app.MapGet("/api/v1/dashboard/metrics", async (
     });
 })
 .WithName("GetDashboardMetrics");
+
+// ---------------------------------------------------------
+// WEBHOOK RECEIVER API
+// ---------------------------------------------------------
+
+app.MapPost("/api/v1/webhooks/{provider}", async (
+    string provider,
+    HttpContext httpContext,
+    [FromServices] IEnumerable<IWebhookProcessor> processors) =>
+{
+    var processor = processors.FirstOrDefault(p =>
+        string.Equals(p.ProviderCode, provider, StringComparison.OrdinalIgnoreCase));
+
+    if (processor == null)
+    {
+        return Results.NotFound(new { error = $"Webhook processor for provider '{provider}' not found." });
+    }
+
+    using var reader = new StreamReader(httpContext.Request.Body);
+    var rawBody = await reader.ReadToEndAsync();
+
+    var headers = httpContext.Request.Headers
+        .ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+
+    var payload = new WebhookPayload
+    {
+        RawBody = rawBody,
+        Headers = headers,
+        Signature = headers.TryGetValue("X-Opn-Signature", out var opnSig) ? opnSig
+            : headers.TryGetValue("X-Omise-Signature", out var omiseSig) ? omiseSig
+            : headers.TryGetValue("X-GB-Signature", out var gbSig) ? gbSig
+            : headers.TryGetValue("X-Checksum", out var chkSig) ? chkSig
+            : headers.TryGetValue("X-Signature", out var xSig) ? xSig
+            : null
+    };
+
+    var result = await processor.ProcessWebhookAsync(payload);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+})
+.WithName("HandleWebhook")
+.WithSummary("Receive and process payment provider webhooks with HMAC validation");
 
 app.Run();
 

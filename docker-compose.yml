@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: payflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: payflow
+      POSTGRES_USER: payflow_user
+      POSTGRES_PASSWORD: payflow_secret_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payflow_user -d payflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - payflow-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: payflow-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - payflow-network
+
+volumes:
+  postgres_data:
+    name: payflow_postgres_data
+  redis_data:
+    name: payflow_redis_data
+
+networks:
+  payflow-network:
+    name: payflow-network
+    driver: bridge
